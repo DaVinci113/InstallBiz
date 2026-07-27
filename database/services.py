@@ -7,6 +7,10 @@ from database.models import StoredFileModel
 from database.schemas import StoredFileCreateShema, StoredFileResponseShema
 from database.db import SessionDep
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def start_download():
     ...
