@@ -1,0 +1,23 @@
+services:
+  database:
+    image: postgres:17.5-alpine3.21
+    environment:
+      POSTGRES_DB: 'postgres'
+      POSTGRES_USER: 'postgres'
+      POSTGRES_PASSWORD: '123456'
+    ports:
+      - '5432:5432'
+
+  app:
+    build: .
+    command: uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - '8000:8000'
+    volumes:
+      - .:/app          # Монтируем код
+      - /app/.venv      # ЗАЩИТА: говорим Docker НЕ трогать .venv внутри контейнера локальными файлами
+    depends_on:
+      - database
+
+volumes:
+  database:
