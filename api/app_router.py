@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.db import SessionDep, get_session
+from database.db import SessionDep
 from database.schemas import (
     FilePageResponse,
     StoredFileResponseShema,
@@ -73,7 +73,7 @@ async def download_start(request: Request):
     tags=["Файлы"],
 )
 async def files_list(
-    session: AsyncSession = Depends(get_session),
+    session: SessionDep,
     order: str = Query("desc", pattern="^(asc|desc)$"),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=200),
@@ -105,7 +105,7 @@ def _count_digits(text: str) -> dict[str, int]:
     summary="Посчитать статистику по цифрам для выбранных файлов",
     tags=["Файлы"],
 )
-async def files_calc(body: CalcRequest, session: AsyncSession = Depends(get_session)):
+async def files_calc(body: CalcRequest, session: SessionDep):
     rows = await get_files_content(session, ids=body.ids, all_files=body.all)
     overall = {str(d): 0 for d in range(10)}
     per_file: list[FileStats] = []
