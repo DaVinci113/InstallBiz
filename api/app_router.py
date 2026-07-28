@@ -59,7 +59,7 @@ async def download_status():
 @router.post("/download/start", status_code=202, tags=["Скачивание"])
 async def download_start(request: Request):
     """Запустить скачивание каталога (фоновая задача). Идемпотентно."""
-    session: aiohttp.ClientSession = request.app.state.http_session
+    session: aiohttp.ClientSession = Depends(get_http_session)
     started = download_manager.start(session)
     return {"started": started, **download_manager.status()}
 
