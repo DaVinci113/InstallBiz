@@ -1,10 +1,144 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Title</title>
-</head>
-<body>
-START DOWNLOAD
-</body>
-</html>
+{% extends "base.html" %}
+{% block title %}Скачивание · InstallBiz{% endblock %}
+
+{% block content %}
+<h1>Страница скачивания</h1>
+<p class="muted">Запуск скачивания каталога файлов через внешнее API. Процесс идёт в фоне
+   порциями по 3 файла, корректно переживает ограничение частоты (429) и временную блокировку (403).</p>
+
+<div class="card">
+    <div class="toolbar">
+        <button id="startBtn" class="btn">⬇️ Скачать данные</button>
+        <a class="btn secondary" href="/files">Перейти к файлам и расчётам →</a>
+    </div>
+
+    <div class="status-row" style="margin-top: 6px;">
+        <div class="stat">
+            <span class="k">Статус</span>
+            <span class="v"><span id="statePill" class="pill idle">idle</span></span>
+        </div>
+        <div class="stat">
+            <span class="k">Старт по Новосибирску</span>
+            <span class="v" id="startedAt">—</span>
+        </div>
+        <div class="stat">
+            <span class="k">Циклов запроса имён</span>
+            <span class="v" id="cycles">0</span>
+        </div>
+        <div class="stat">
+            <span class="k">Получено имён</span>
+            <span class="v" id="received">0</span>
+        </div>
+        <div class="stat">
+            <span class="k">Скачано файлов</span>
+            <span class="v" id="downloaded">0</span>
+        </div>
+        <div class="stat">
+            <span class="k">Отмечено скачанными</span>
+            <span class="v" id="marked">0</span>
+        </div>
+    </div>
+
+    <div class="progress"><div id="progressBar"></div></div>
+
+    <p id="message" class="muted" style="margin-top: 14px;">Нажмите «Скачать данные», чтобы начать.</p>
+
+    <div id="blockedInfo" style="display:none; margin-top: 10px;">
+        <p style="color: var(--danger); margin: 0;">
+            ⛔ Заблокирован. До разблокировки (НСК): <strong id="blockedUntil">—</strong>.
+            <span id="retryIn"></span>
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const startBtn = document.getElementById('startBtn');
+    const statePill = document.getElementById('statePill');
+    const startedAt = document.getElementById('startedAt');
+    const cycles = document.getElementById('cycles');
+    const received = document.getElementById('received');
+    const downloaded = document.getElementById('downloaded');
+    const marked = document.getElementById('marked');
+    const progressBar = document.getElementById('progressBar');
+    const messageEl = document.getElementById('message');
+    const blockedInfo = document.getElementById('blockedInfo');
+    const blockedUntil = document.getElementById('blockedUntil');
+    const retryIn = document.getElementById('retryIn');
+
+    const STATE_LABEL = {
+        idle: 'ожидание', running: 'скачивание', throttled: 'пауза (429)',
+        blocked: 'блокировка', done: 'готово', error: 'ошибка'
+    };
+
+    function render(s) {
+        statePill.textContent = STATE_LABEL[s.state] || s.state;
+        statePill.className = 'pill ' + s.state;
+        startedAt.textContent = s.started_at_nsk || '—';
+        cycles.textContent = s.cycles;
+        received.textContent = s.received;
+        downloaded.textContent = s.downloaded;
+        marked.textContent = s.marked;
+        messageEl.textContent = s.message || '';
+
+        const pct = s.received > 0 ? Math.min(100, Math.round((s.downloaded / s.received) * 100)) : 0;
+        progressBar.style.width = pct + '%';
+        progressBar.style.background = (s.state === 'done') ? 'var(--ok)' :
+            (s.state === 'blocked') ? 'var(--danger)' : (s.state === 'throttled') ? 'var(--warn)' : 'var(--accent)';
+
+        startBtn.disabled = (s.state === 'running' || s.state === 'throttled');
+
+        if (s.state === 'blocked' && s.blocked_until_nsk) {
+            blockedInfo.style.display = 'block';
+            blockedUntil.textContent = s.blocked_until_nsk;
+            retryIn.textContent = s.retry_in != null ? `(осталось ~${s.retry_in.toFixed(0)} с)` : '';
+        } else if (s.state === 'throttled') {
+            blockedInfo.style.display = 'block';
+            blockedUntil.textContent = '—';
+            retryIn.textContent = s.retry_in != null ? `Пауза перед повтором: ~${s.retry_in.toFixed(0)} с` : '';
+        } else {
+            blockedInfo.style.display = 'none';
+        }
+    }
+
+    let pollT = null;
+    async function poll() {
+        try {
+            const r = await fetch('/download/status');
+            const s = await r.json();
+            render(s);
+            if (s.state === 'done' && pollT) { clearInterval(pollT); pollT = null; toast('✅ Каталог скачан полностью'); }
+            if (s.state === 'error' && pollT) { clearInterval(pollT); pollT = null; toast('Ошибка: ' + (s.last_error || ''), true); }
+        } catch (e) { /* сеть — продолжаем polling */ }
+    }
+
+    startBtn.addEventListener('click', async () => {
+        startBtn.disabled = true;
+        try {
+            const r = await fetch('/download/start', { method: 'POST' });
+            const s = await r.json();
+            render(s);
+            if (!s.started) toast('Скачивание уже идёт');
+            if (pollT) clearInterval(pollT);
+            pollT = setInterval(poll, 1500);
+            poll();
+        } catch (e) {
+            startBtn.disabled = false;
+            toast('Не удалось запустить скачивание', true);
+        }
+    });
+
+    // Первичная отрисовка — вдруг задача уже идёт после перезагрузки.
+    poll().then(() => {
+        fetch('/download/status').then(r => r.json()).then(s => {
+            if (s.state === 'running' || s.state === 'throttled') {
+                if (pollT) clearInterval(pollT);
+                pollT = setInterval(poll, 1500);
+            }
+        });
+    });
+})();
+</script>
+{% endblock %}

@@ -1,4 +1,5 @@
-from fastapi import FastAPI, Request
+from pathlib import Path
+from fastapi import FastAPI
 from contextlib import asynccontextmanager
 import aiohttp
 import api.app_router
@@ -14,6 +15,9 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+BASE_DIR = Path(__file__).resolve().parent
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
@@ -28,11 +32,12 @@ async def lifespan(app: FastAPI):
     logger.info("HTTP сессия закрыта")
     logger.info('App is stopped')
 
+
 app = FastAPI(
     lifespan=lifespan,
     title="InstallBiz Test Task",
 )
 
-# app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 app.include_router(api.app_router.router)
