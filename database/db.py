@@ -6,8 +6,8 @@ from typing import Annotated, AsyncIterator
 
 DB_USER = 'postgres'
 DB_NAME = 'postgres'
-# DB_HOST = 'database'
-DB_HOST = 'localhost'
+DB_HOST = 'database'
+# DB_HOST = 'localhost'
 DB_PORT = '5432'
 DB_PASSWORD = '123456'
 
